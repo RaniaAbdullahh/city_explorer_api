@@ -14,7 +14,20 @@ console.log(PORT);
 const app = express();
 app.use(cors());
 //-------------
+const pg = require('pg');
+const DATABASE = process.env.DATABASE;
+const client = new pg.Client(DATABASE);
+//-------------
+app.get('/get-locations', (req, res) => {
+  const location = 'SELECT * FROM location ;';
+  client.query(location).then(result => {
+    res.status(200).json(result.rows);
+  });
+});
+//-----------
 
+app.get('/add-location',locationHndler);
+//-------------
 //  home Route
 app.get('/', welcomePage);
 //location  Rout
@@ -23,7 +36,7 @@ app.get('/location', locationHndler);
 app.get('/weather', weatherHandler);
 
 //  trial Route
-app.get('/trails',trailsHandler);
+app.get('/trails', trailsHandler);
 //---------
 app.use('*', notFound);
 
@@ -37,8 +50,8 @@ function Location(city, locationData) {
 }
 
 //for(500) error
-Location.prototype.errorHandler= function(){
-  if(!this.formatted_query.includes(this.search_query)){
+Location.prototype.errorHandler = function () {
+  if (!this.formatted_query.includes(this.search_query)) {
     error();
 
 
@@ -53,14 +66,14 @@ function Weather(weatherData) {
   this.time = weatherData.datetime;
 }
 // Trail constructor
-function Trail(trailObj){
-  this.name=trailObj.name;
+function Trail(trailObj) {
+  this.name = trailObj.name;
   this.location = trailObj.location;
   this.length = trailObj.length;
   this.stars = trailObj.stars;
   this.star_votes = trailObj.starVotes;
   this.summary = trailObj.summary;
-  this.trail_url= trailObj.url;
+  this.trail_url = trailObj.url;
   this.conditions = trailObj.conditionDetails;
   this.condition_date = trailObj.conditionDate;
 
@@ -74,19 +87,21 @@ function welcomePage(request, response) {
 function locationHndler(request, response) {
   const city = request.query.city;
   const url = `https://eu1.locationiq.com/v1/search.php?key=${GEOIQ}&q=${city}&format=json`;
+  let locationArr = [];
   superagent.get(url).then(locationData => {
     //console.log(locationData.body);
-
-
-    let location = new Location(city, locationData.body);
-    response.json(location);
-
+    locationArr.push(new Location(city, locationData.body));
+    const newValues = 'INSERT INTO location (search_query,formatted_query,latitude,longitude) VALUES($1,$2,$3,$4);';
+    const saveValues = [locationArr[0].search_query, locationArr[0].formatted_query, locationArr[0].latitude, locationArr[0].longitude];
+    //response.json(location);
+    client.query(newValues, saveValues).then(data => {
+      response.status(200).json(data);
+    });
   });
-
-
 }
+
 function weatherHandler(reqeust, response) {
-  const url =  `https://api.weatherbit.io/v2.0/forecast/daily?lat=38.123&lon=-78.543&key=${WEATHERQ}`;
+  const url = `https://api.weatherbit.io/v2.0/forecast/daily?lat=38.123&lon=-78.543&key=${WEATHERQ}`;
   superagent.get(url).then(weatherData => {
     let weather = weatherData.body.data.map(Data => {
       // console.log(Data);
@@ -97,7 +112,7 @@ function weatherHandler(reqeust, response) {
   }).catch(console.error);
 
 }
-function trailsHandler(reqeust, response){
+function trailsHandler(reqeust, response) {
 
   // const url = `https://www.hikingproject.com/data/get?lat=40.0274&lon=-105.2519&maxDistance=10&key=${TRAILQ}`;
   const url = `https://www.hikingproject.com/data/get-trails?lat=40.0274&lon=-105.2519&maxDistance=10&key=200959308-d46bf86a332e86ae55bf43b6e24ea048`;
@@ -128,6 +143,11 @@ function error(request, resp) {
 }
 
 //------------
-app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
+//app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
 
 
+client.connect().then(() => {
+  app.listen(PORT, () => console.log(`Listening to port ${PORT}`));
+}).catch(error => {
+  console.log('error', error);
+});
