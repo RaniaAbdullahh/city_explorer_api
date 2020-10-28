@@ -15,8 +15,8 @@ const app = express();
 app.use(cors());
 //-------------
 const pg = require('pg');
-const DATABASE = process.env.DATABASE;
-const client = new pg.Client(DATABASE);
+const DATABASE_URL = process.env.DATABASE_URL;
+const client = new pg.Client(DATABASE_URL);
 //-------------
 app.get('/get-locations', (req, res) => {
   const location = 'SELECT * FROM location ;';
