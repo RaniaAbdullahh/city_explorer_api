@@ -10,23 +10,23 @@ const PORT = process.env.PORT || 3000;
 const GEOIQ = process.env.GEOIQ;
 const WEATHERQ = process.env.WEATHERQ;
 const TRAILQ = process.env.TRAILQ;
-console.log(PORT);
 const app = express();
 app.use(cors());
 //-------------
 const pg = require('pg');
+const request = require('superagent');
 const DATABASE_URL = process.env.DATABASE_URL;
 const client = new pg.Client(DATABASE_URL);
 //-------------
-app.get('/get-locations', (req, res) => {
-  const location = 'SELECT * FROM location ;';
-  client.query(location).then(result => {
-    res.status(200).json(result.rows);
-  });
-});
+// app.get('/get-locations', (req, res) => {
+//   const location = 'SELECT * FROM location ;';
+//   client.query(location).then(result => {
+//     res.status(200).json(result.rows);
+//   });
+// });
 //-----------
 
-app.get('/add-location',locationHndler);
+//app.get('/add-location', locationHndler);
 //-------------
 //  home Route
 app.get('/', welcomePage);
@@ -85,19 +85,46 @@ function welcomePage(request, response) {
 }
 
 function locationHndler(request, response) {
+  const location = 'SELECT * FROM location WHERE search_query=$1;';
   const city = request.query.city;
-  const url = `https://eu1.locationiq.com/v1/search.php?key=${GEOIQ}&q=${city}&format=json`;
-  let locationArr = [];
-  superagent.get(url).then(locationData => {
-    //console.log(locationData.body);
-    locationArr.push(new Location(city, locationData.body));
-    const newValues = 'INSERT INTO location (search_query,formatted_query,latitude,longitude) VALUES($1,$2,$3,$4);';
-    const saveValues = [locationArr[0].search_query, locationArr[0].formatted_query, locationArr[0].latitude, locationArr[0].longitude];
-    //response.json(location);
-    client.query(newValues, saveValues).then(data => {
-      response.status(200).json(data);
-    });
+  const safrvar = [city];
+  client.query(location, safrvar).then(result => {
+    if (!(result.rowCount === 0)) {
+      //console.log(result);
+      //console.log(result.rows[0].search_query);
+      // result.rows.forEach(value=>{
+      //   console.log(value.search_query);
+      //   //   if (value.search_query !== null){
+      //   //     console.log('whatttt');
+      //   //     response.status(200).json(result.rows);
+      //   //   }else{
+      //   //     console.log('pleassssse');
+      //   //   }
+
+      // });
+      response.status(200).json(result.rows[0]);
+    }
+    else {
+
+      console.log('after catch');
+      const url = `https://eu1.locationiq.com/v1/search.php?key=${GEOIQ}&q=${city}&format=json`;
+      let locationArr;
+      superagent.get(url).then(locationData => {
+        //console.log(locationData.body);
+        locationArr = new Location(city, locationData.body);
+        const newValues = 'INSERT INTO location (search_query,formatted_query,latitude,longitude) VALUES($1,$2,$3,$4);';
+        const saveValues = [locationArr.search_query, locationArr.formatted_query, locationArr.latitude, locationArr.longitude];
+        //response.json(location);
+        client.query(newValues, saveValues).then(() => {
+          //console.log(saveValues);
+          response.status(200).json(locationArr);
+        });
+
+      });
+    }
+
   });
+
 }
 
 function weatherHandler(reqeust, response) {
@@ -113,19 +140,18 @@ function weatherHandler(reqeust, response) {
 
 }
 function trailsHandler(reqeust, response) {
+  let lat=reqeust.query.latitude;
+  let lon=reqeust.query.longitude;
 
-  // const url = `https://www.hikingproject.com/data/get?lat=40.0274&lon=-105.2519&maxDistance=10&key=${TRAILQ}`;
-  const url = `https://www.hikingproject.com/data/get-trails?lat=40.0274&lon=-105.2519&maxDistance=10&key=200959308-d46bf86a332e86ae55bf43b6e24ea048`;
+  const url = `https://www.hikingproject.com/data/get-trails?lat=${lat}&lon=${lon}&key=${TRAILQ}`;
+  console.log(url);
 
   superagent.get(url).then(trailsData => {
-    console.log(trailsData.body.trails);
-
     let trail = trailsData.body.trails.map(Data => {
       return new Trail(Data);
     });
-    console.log(trail);
     response.json(trail);
-  }).catch(console.error);
+  }).catch();
 
 
 
