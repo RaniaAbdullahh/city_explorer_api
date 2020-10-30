@@ -10,24 +10,18 @@ const PORT = process.env.PORT || 3000;
 const GEOIQ = process.env.GEOIQ;
 const WEATHERQ = process.env.WEATHERQ;
 const TRAILQ = process.env.TRAILQ;
+const MOVIES = process.env.MOVIES;
+const YELP = process.env.YELP;
 const app = express();
 app.use(cors());
 //-------------
 const pg = require('pg');
 const request = require('superagent');
+//const axios = require("axios");
 const DATABASE_URL = process.env.DATABASE_URL;
 const client = new pg.Client(DATABASE_URL);
 //-------------
-// app.get('/get-locations', (req, res) => {
-//   const location = 'SELECT * FROM location ;';
-//   client.query(location).then(result => {
-//     res.status(200).json(result.rows);
-//   });
-// });
-//-----------
 
-//app.get('/add-location', locationHndler);
-//-------------
 //  home Route
 app.get('/', welcomePage);
 //location  Rout
@@ -38,6 +32,8 @@ app.get('/weather', weatherHandler);
 //  trial Route
 app.get('/trails', trailsHandler);
 //---------
+app.get('/movies', moviesHandler);
+app.get('/yelp', yelpHandler);
 app.use('*', notFound);
 
 // location constructor
@@ -49,16 +45,12 @@ function Location(city, locationData) {
   this.longitude = locationData[0].lon;
 }
 
-//for(500) error
-Location.prototype.errorHandler = function () {
-  if (!this.formatted_query.includes(this.search_query)) {
-    error();
-
-
-
-  }
-
-};
+// //for(500) error
+// Location.prototype.errorHandler = function () {
+//   if (!this.formatted_query.includes(this.search_query)) {
+//     error();
+//   }
+// };
 
 
 function Weather(weatherData) {
@@ -77,6 +69,26 @@ function Trail(trailObj) {
   this.conditions = trailObj.conditionDetails;
   this.condition_date = trailObj.conditionDate;
 
+
+}
+//movies constructor 
+function Movie(movieObj) {
+  this.title = movieObj.title;
+  this.overview = movieObj.overview;
+  this.vote_average = movieObj.vote_average;
+  this.vote_count = movieObj.vote_count;
+  this.poster_path = movieObj.poster_path;
+  this.popularity = movieObj.popularity;
+  this.release_date = movieObj.release_date;
+
+}
+//yelp constructor 
+function Yelp(yelbObj) {
+  this.name = yelbObj.name;
+  this.image_url = yelbObj.image_url;
+  this.price = yelbObj.price;
+  this.rating = yelbObj.rating;
+  this.url = yelbObj.url;
 }
 
 //helpers functions------------
@@ -106,7 +118,7 @@ function locationHndler(request, response) {
     }
     else {
 
-      console.log('after catch');
+      //console.log('after catch');
       const url = `https://eu1.locationiq.com/v1/search.php?key=${GEOIQ}&q=${city}&format=json`;
       let locationArr;
       superagent.get(url).then(locationData => {
@@ -139,34 +151,116 @@ function weatherHandler(reqeust, response) {
   }).catch(console.error);
 
 }
+
+
+
+//console.log('lat');
 function trailsHandler(reqeust, response) {
-  let lat=reqeust.query.latitude;
-  let lon=reqeust.query.longitude;
+  let lat = reqeust.query.latitude;
+  let lon = reqeust.query.longitude;
+  //console.log('before')
 
   const url = `https://www.hikingproject.com/data/get-trails?lat=${lat}&lon=${lon}&key=${TRAILQ}`;
-  console.log(url);
+  //console.log(url);
+
+
+
 
   superagent.get(url).then(trailsData => {
+    //console.log(trailsData.body);
     let trail = trailsData.body.trails.map(Data => {
       return new Trail(Data);
     });
     response.json(trail);
-  }).catch();
+  }).catch(console.error);
+
+  //console.log('after')
+
+}
 
 
 
 
+
+
+function moviesHandler(request, response) {
+  let region = request.query.search_query.slice(0, 2).toUpperCase();
+  const url = `https://api.themoviedb.org/3/movie/top_rated?api_key=${MOVIES}&region=${region}`;
+  superagent.get(url).then(moviesData => {
+    //console.log(moviesData.body.results);
+    let movie = moviesData.body.results.map(Data => {
+      //console.log(Data);
+      return new Movie(Data);
+    });
+    response.json(movie);
+    //console.log(movie);
+  }).catch(console.error);
+}
+
+function yelpHandler(request, response) {
+  const region = request.query.search_query;
+  const longitude = request.query.longitude;
+  const latitude = request.query.latitude;
+  const page=request.query.page;
+  let offset=5*(page-1);//for ordering 
+  const url = `https://api.yelp.com/v3/businesses/search`;
+  //passing parameters
+  let queryParemeter={
+    location:region,
+    latitude:latitude,
+    longitude:longitude,
+    api_key:YELP,
+    offset:offset,
+    limit:5,
+    categories:'Restaurants ',
+    format:'json'
+  };
+  superagent.get(url).query(queryParemeter).set('Authorization', `Bearer ${YELP}`).then(yelpsData => {
+    console.log(yelpsData.body);
+   let yelps = yelpsData.body.businesses.map((value) => {
+      return (new Yelp(value));
+    });
+    response.json(yelps);
+  }).catch(() => {
+    response.status(500).send('Sorry,something went wrong');
+  })
+
+  //let url = `https://api.yelp.com/v3/businesses/search?api_key=${YELP}`;
+  //let url =`https://api.yelp.com/v3/businesses/search?api_key=${YELP}&categories=&latitude=37.786882&longitude=-122.399972&location=${location}`;
+
+  // superagent.get(url).then(yelpsData => {
+  //   console.log(yelpsData.body);
+  //   let yelp = yelpsData.body.results.map(Data => {
+  //     //console.log(Data);
+  //     return new Yelp(Data);
+  //   });
+  //   response.json(yelp);
+
+  // }).catch(console.error);
+
+  // axios.get(`https://api.yelp.com/v3/businesses/search`, {headers: { Authorization: `Bearer ${YELP}`}, params: { location: { location },categories: 'Restaurants'}
+  //   .then(yelpsData => {
+  //     console.log(yelpsData.body);
+  //     let yelp = yelpsData.body.results.map(Data => {
+  //       //console.log(Data);
+  //       return new Yelp(Data);
+  //     });
+  //     response.json(yelp);
+
+  //   }).catch(console.error)
+  // })
 
 
 }
+
+
+
+
 
 function notFound(request, resp) {
   resp.status(404).send('Not found');
 }
 
-function error(request, resp) {
-  resp.status(500).send('Error ! ');
-}
 
 //------------
 //app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
@@ -177,3 +271,7 @@ client.connect().then(() => {
 }).catch(error => {
   console.log('error', error);
 });
+
+
+
+
